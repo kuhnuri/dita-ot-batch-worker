@@ -1,0 +1,18 @@
+apply plugin: 'java'
+
+group = 'com.elovirta'
+version = '3.2'
+description = """DITA Open Toolkit Batch"""
+
+sourceCompatibility = 11
+targetCompatibility = 11
+
+repositories {
+    mavenCentral()
+    jcenter()
+}
+
+dependencies {
+    compile group: 'org.dita-ot', name: 'dost', version: '3.2'
+}
+
