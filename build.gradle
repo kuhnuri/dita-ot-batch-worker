@@ -13,6 +13,6 @@ repositories {
 }
 
 dependencies {
-    compile group: 'org.dita-ot', name: 'dost', version: '3.2'
+    compile group: 'org.dita-ot', name: 'dost', version: '3.3.1'
 }
 

@@ -1,4 +1,4 @@
-FROM jelovirt/kuhnuri_dita-ot:3.2
+FROM jelovirt/kuhnuri_dita-ot:3.3.2
 
 # RUN mkdir -p /opt/app/conf && \
 #     mkdir -p /opt/app/lib
