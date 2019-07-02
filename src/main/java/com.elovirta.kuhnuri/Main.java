@@ -24,7 +24,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-public class Main {
+public class Main extends org.apache.tools.ant.Main {
+
+    static final String ENV_INPUT = "input";
+    static final String ENV_OUTPUT = "output";
 
     private final HttpClient client = HttpClient.newHttpClient();
     private final AmazonS3 s3client = AmazonS3ClientBuilder
@@ -36,16 +39,23 @@ public class Main {
     private void run(final String[] args) throws Exception {
         System.out.println(String.format("Run DITA-OT: %s", String.join(" ", args)));
 
-        final URI in = download(new URI(System.getenv("input")));
+        final URI in = download(new URI(System.getenv(ENV_INPUT)));
         final Path out = getTempDir("out");
 
         final Properties props = new Properties();
         props.setProperty("args.input", in.toString());
         props.setProperty("output.dir", out.toString());
 
-        new org.apache.tools.ant.Main().startAnt(args, props, null);
+        startAnt(args, props, null);
 
-        upload(out, new URI(System.getenv("output")));
+       upload(out, new URI(System.getenv(ENV_OUTPUT)));
+    }
+
+    @Override
+    protected void exit(final int exitCode) {
+        if (exitCode != 0) {
+            System.exit(exitCode);
+        }
     }
 
     private void upload(final Path outDirOrFile, final URI output) throws IOException, InterruptedException {
@@ -182,7 +192,7 @@ public class Main {
     }
 
     private Path getTempDir(final String prefix) throws IOException {
-        return Files.createTempDirectory(prefix);
+        return Files.createTempDirectory(prefix + "_");
     }
 
     public static void main(final String[] args) {
