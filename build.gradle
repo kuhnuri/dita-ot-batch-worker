@@ -14,5 +14,18 @@ repositories {
 
 dependencies {
     compile group: 'org.dita-ot', name: 'dost', version: '3.3.1'
+    compile group: 'com.amazonaws', name: 'aws-java-sdk', version: '1.11.584'
 }
 
+task dist(type: Copy, dependsOn: [clean, jar]) {
+    from (configurations.runtime.allArtifacts.files)
+    from (configurations.runtime) {
+        include "aws-java-sdk-1.11.584.jar"
+        include "aws-java-sdk-core-1.11.584.jar"
+        include "aws-java-sdk-s3-1.11.584.jar"
+        include "httpclient-*"
+        include "httpcore-*"
+        include "joda-time-*"
+    }
+    destinationDir = file("build/dist")
+}

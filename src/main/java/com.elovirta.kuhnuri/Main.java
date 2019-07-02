@@ -1,26 +1,43 @@
 package com.elovirta.kuhnuri;
 
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.AmazonS3URI;
+import com.amazonaws.services.s3.transfer.Transfer;
+import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
+import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Properties;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 public class Main {
 
+    private final HttpClient client = HttpClient.newHttpClient();
+    private final AmazonS3 s3client = AmazonS3ClientBuilder
+            .standard()
+//                .withCredentials(new DefaultAWSCredentialsProviderChain())
+            .withRegion(Regions.fromName("eu-west-1"))
+            .build();
+
     private void run(final String[] args) throws Exception {
         System.out.println("Run DITA-OT: " + String.join(" ", args));
 
-        final URI in = download(new URI(System.getProperty("input")));
-        final Path out = getTempDir();
+        final URI in = download(new URI(System.getenv("input")));
+        final Path out = getTempDir("out");
 
         final Properties props = new Properties();
         props.setProperty("args.input", in.toString());
@@ -28,10 +45,25 @@ public class Main {
 
         new org.apache.tools.ant.Main().startAnt(args, props, null);
 
-        upload(out, new URI(System.getProperty("output")));
+        upload(out, new URI(System.getenv("output")));
     }
 
-    private void upload(final Path out, final URI input) {
+    private void upload(final Path outDirOrFile, final URI output) throws IOException, InterruptedException {
+        switch (output.getScheme()) {
+            case "s3":
+                uploadToS3(outDirOrFile, output);
+            case "jar":
+                final JarUri jarUri = JarUri.of(output);
+                final Path jar = Files.createTempFile("out", ".jar");
+                zip(outDirOrFile, jar);
+                upload(jar, jarUri.url);
+                Files.delete(jar);
+            case "http":
+            case "https":
+                uploadToHttp(outDirOrFile, output);
+            default:
+                throw new IllegalArgumentException(output.toString());
+        }
     }
 
     // Download or pass as is to OT
@@ -39,7 +71,7 @@ public class Main {
         switch (input.getScheme()) {
             case "s3":
             case "jar":
-                return downloadFile(input, getTempDir()).toUri();
+                return downloadFile(input, getTempDir("in")).toUri();
             default: {
                 return input;
             }
@@ -88,32 +120,10 @@ public class Main {
         }
     }
 
-    private static class JarUri {
-        public final URI url;
-        public final String entry;
-
-        private JarUri(URI url, String entry) {
-            this.url = url;
-            this.entry = entry;
-        }
-
-        public static JarUri of(final URI in) {
-            if (!in.getScheme().equals("jar")) {
-                throw new IllegalArgumentException(in.toString());
-            }
-            final String s = in.toString();
-            final int i = s.indexOf("!/");
-            return new JarUri(URI.create(s.substring(4, i)), s.substring(i + 2));
-        }
-
-    }
-
-
     private Path downloadFromHttp(final URI in, final Path tempDir) throws IOException, InterruptedException {
         final String fileName = getName(in);
         final Path file = tempDir.resolve(fileName);
         System.out.println("Download " + in + " to " + file);
-        final HttpClient client = HttpClient.newHttpClient();
         final HttpRequest request = HttpRequest.newBuilder()
                 .uri(in)
                 .build();
@@ -121,17 +131,46 @@ public class Main {
         return response.body();
     }
 
-    private Path downloadFromS3(final URI in, final Path tempDir) throws IOException, InterruptedException {
+    private Path downloadFromS3(final URI in, final Path tempDir) throws InterruptedException {
+        final AmazonS3URI s3Uri = new AmazonS3URI(in);
         final String fileName = getName(in);
         final Path file = tempDir.resolve(fileName);
+        final TransferManager tx = TransferManagerBuilder.standard().withS3Client(s3client).build();
+        final Transfer transfer = tx.download(s3Uri.getBucket(), s3Uri.getKey(), file.toFile());
         System.out.println("Download S3 " + in + " to " + file);
-        final HttpClient client = HttpClient.newHttpClient();
-        final HttpRequest request = HttpRequest.newBuilder()
-                .uri(in)
-                .build();
-        HttpResponse<Path> response = client.send(request, BodyHandlers.ofFile(file));
-        return response.body();
+        transfer.waitForCompletion();
+        tx.shutdownNow();
+        return file;
     }
+
+    private void uploadToHttp(final Path dirOrFile, final URI output) throws IOException {
+        final Stream<Path> file = Files.isDirectory(dirOrFile)
+                ? Files.walk(dirOrFile).filter(path -> !Files.isDirectory(path))
+                : Stream.of(dirOrFile);
+        file.parallel().forEach(path -> {
+            try {
+                System.out.println("Upload " + output + " to " + output);
+                final HttpRequest request = HttpRequest.newBuilder()
+                        .uri(output)
+                        .POST(BodyPublishers.ofFile(path))
+                        .build();
+                client.sendAsync(request, BodyHandlers.discarding()).join();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    private void uploadToS3(final Path dirOrFile, final URI output) throws InterruptedException {
+        final AmazonS3URI s3Uri = new AmazonS3URI(output);
+        final TransferManager tx = TransferManagerBuilder.standard().withS3Client(s3client).build();
+        final Transfer transfer = Files.isDirectory(dirOrFile)
+                ? tx.uploadDirectory(s3Uri.getBucket(), s3Uri.getKey(), dirOrFile.toFile(), true)
+                : tx.upload(s3Uri.getBucket(), s3Uri.getKey(), dirOrFile.toFile());
+        transfer.waitForCompletion();
+        tx.shutdownNow();
+    }
+
 
     private String getName(final URI in) {
         final String path = in.getPath();
@@ -139,8 +178,8 @@ public class Main {
         return i != -1 ? path.substring(i + 1) : path;
     }
 
-    private Path getTempDir() throws IOException {
-        return Files.createTempDirectory("tmp");
+    private Path getTempDir(final String prefix) throws IOException {
+        return Files.createTempDirectory(prefix);
     }
 
     public static void main(final String[] args) {
@@ -148,6 +187,7 @@ public class Main {
             (new Main()).run(args);
         } catch (Exception e) {
             System.err.println(e.getMessage());
+            e.printStackTrace();
             System.exit(1);
         }
     }

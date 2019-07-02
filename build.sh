@@ -2,4 +2,4 @@
 
 set -e
 
-gradle clean jar
+gradle dist
