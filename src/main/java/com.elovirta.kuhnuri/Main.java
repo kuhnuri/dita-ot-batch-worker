@@ -83,15 +83,18 @@ public class Main extends org.apache.tools.ant.Main {
         switch (output.getScheme()) {
             case "s3":
                 uploadToS3(outDirOrFile, output);
+                break;
             case "jar":
                 final JarUri jarUri = JarUri.of(output);
                 final Path jar = Files.createTempFile("out", ".jar");
                 ZipUtils.zip(outDirOrFile, jar);
                 upload(jar, jarUri.url);
                 Files.delete(jar);
+                break;
             case "http":
             case "https":
                 uploadToHttp(outDirOrFile, output);
+                break;
             default:
                 throw new IllegalArgumentException(output.toString());
         }
