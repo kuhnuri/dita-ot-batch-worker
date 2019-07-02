@@ -1,6 +1,5 @@
 package com.elovirta.kuhnuri;
 
-import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.AmazonS3URI;
@@ -17,38 +16,60 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.Properties;
 import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
 
+/**
+ * Main class to download input, run DITA-OT, and upload output.
+ */
 public class Main extends org.apache.tools.ant.Main {
 
     static final String ENV_INPUT = "input";
     static final String ENV_OUTPUT = "output";
 
-    private final HttpClient client = HttpClient.newHttpClient();
-    private final AmazonS3 s3client = AmazonS3ClientBuilder
-            .standard()
-//                .withCredentials(new DefaultAWSCredentialsProviderChain())
-            .withRegion(Regions.fromName("eu-west-1"))
-            .build();
+    private HttpClient client;
+    private AmazonS3 s3client;
+    private TransferManager transferManager;
 
+    private void init() {
+        client = HttpClient.newHttpClient();
+        s3client = AmazonS3ClientBuilder
+                .standard()
+//            .withCredentials(new DefaultAWSCredentialsProviderChain())
+//            .withRegion(Regions.fromName("eu-west-1"))
+                .build();
+        transferManager = TransferManagerBuilder
+                .standard()
+                .withS3Client(s3client)
+                .build();
+    }
+
+    private void cleanup() {
+        transferManager.shutdownNow();
+    }
+
+    /**
+     * Download input, run DITA-OT, and upload output.
+     */
     private void run(final String[] args) throws Exception {
-        System.out.println(String.format("Run DITA-OT: %s", String.join(" ", args)));
+        try {
+            init();
 
-        final URI in = download(new URI(System.getenv(ENV_INPUT)));
-        final Path out = getTempDir("out");
+            System.out.println(String.format("Run DITA-OT: %s", String.join(" ", args)));
 
-        final Properties props = new Properties();
-        props.setProperty("args.input", in.toString());
-        props.setProperty("output.dir", out.toString());
+            final URI in = download(new URI(System.getenv(ENV_INPUT)));
+            final Path out = getTempDir("out");
 
-        startAnt(args, props, null);
+            final Properties props = new Properties();
+            props.setProperty("args.input", in.toString());
+            props.setProperty("output.dir", out.toString());
 
-       upload(out, new URI(System.getenv(ENV_OUTPUT)));
+            startAnt(args, props, null);
+
+            upload(out, new URI(System.getenv(ENV_OUTPUT)));
+        } finally {
+            cleanup();
+        }
     }
 
     @Override
@@ -65,7 +86,7 @@ public class Main extends org.apache.tools.ant.Main {
             case "jar":
                 final JarUri jarUri = JarUri.of(output);
                 final Path jar = Files.createTempFile("out", ".jar");
-                zip(outDirOrFile, jar);
+                ZipUtils.zip(outDirOrFile, jar);
                 upload(jar, jarUri.url);
                 Files.delete(jar);
             case "http":
@@ -76,7 +97,6 @@ public class Main extends org.apache.tools.ant.Main {
         }
     }
 
-    // Download or pass as is to OT
     private URI download(final URI input) throws Exception {
         switch (input.getScheme()) {
             case "s3":
@@ -88,35 +108,6 @@ public class Main extends org.apache.tools.ant.Main {
         }
     }
 
-    private void unzip(final Path jar, final Path tempDir) throws IOException {
-        System.out.println(String.format("Unzip %s to %s", jar, tempDir));
-        try (ZipInputStream in = new ZipInputStream(Files.newInputStream(jar, StandardOpenOption.READ))) {
-            for (ZipEntry entry = in.getNextEntry(); entry != null; entry = in.getNextEntry()) {
-                Files.copy(in, tempDir.resolve(entry.getName()));
-                in.closeEntry();
-            }
-        }
-    }
-
-    private void zip(final Path tempDir, final Path jar) throws IOException {
-        System.out.println(String.format("Zip %s to %s", tempDir, jar));
-        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(jar, StandardOpenOption.WRITE))) {
-            Files.walk(tempDir)
-                    .filter(path -> !Files.isDirectory(path))
-                    .forEach(path -> {
-                        final Path name = tempDir.relativize(path);
-                        final ZipEntry entry = new ZipEntry(name.toString());
-                        try {
-                            out.putNextEntry(entry);
-                            Files.copy(path, out);
-                            out.closeEntry();
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-                    });
-        }
-    }
-
     private Path downloadFile(final URI input, final Path tempDir) throws Exception {
         switch (input.getScheme()) {
             case "s3":
@@ -124,7 +115,7 @@ public class Main extends org.apache.tools.ant.Main {
             case "jar":
                 final JarUri jarUri = JarUri.of(input);
                 final Path jar = downloadFile(jarUri.url, tempDir);
-                unzip(jar, tempDir);
+                ZipUtils.unzip(jar, tempDir);
                 Files.delete(jar);
                 return tempDir.resolve(jarUri.entry);
             default:
@@ -147,11 +138,9 @@ public class Main extends org.apache.tools.ant.Main {
         final AmazonS3URI s3Uri = new AmazonS3URI(in);
         final String fileName = getName(in);
         final Path file = tempDir.resolve(fileName);
-        final TransferManager tx = TransferManagerBuilder.standard().withS3Client(s3client).build();
-        final Transfer transfer = tx.download(s3Uri.getBucket(), s3Uri.getKey(), file.toFile());
+        final Transfer transfer = transferManager.download(s3Uri.getBucket(), s3Uri.getKey(), file.toFile());
         System.out.println(String.format("Download %s to %s", in, file));
         transfer.waitForCompletion();
-        tx.shutdownNow();
         return file;
     }
 
@@ -176,14 +165,11 @@ public class Main extends org.apache.tools.ant.Main {
     private void uploadToS3(final Path dirOrFile, final URI output) throws InterruptedException {
         System.out.println(String.format("Upload %s to %s", dirOrFile, output));
         final AmazonS3URI s3Uri = new AmazonS3URI(output);
-        final TransferManager tx = TransferManagerBuilder.standard().withS3Client(s3client).build();
         final Transfer transfer = Files.isDirectory(dirOrFile)
-                ? tx.uploadDirectory(s3Uri.getBucket(), s3Uri.getKey(), dirOrFile.toFile(), true)
-                : tx.upload(s3Uri.getBucket(), s3Uri.getKey(), dirOrFile.toFile());
+                ? transferManager.uploadDirectory(s3Uri.getBucket(), s3Uri.getKey(), dirOrFile.toFile(), true)
+                : transferManager.upload(s3Uri.getBucket(), s3Uri.getKey(), dirOrFile.toFile());
         transfer.waitForCompletion();
-        tx.shutdownNow();
     }
-
 
     private String getName(final URI in) {
         final String path = in.getPath();
@@ -199,7 +185,6 @@ public class Main extends org.apache.tools.ant.Main {
         try {
             (new Main()).run(args);
         } catch (Exception e) {
-            System.err.println(e.getMessage());
             e.printStackTrace();
             System.exit(1);
         }
