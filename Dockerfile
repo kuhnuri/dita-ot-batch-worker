@@ -4,6 +4,7 @@ FROM jelovirt/kuhnuri_dita-ot:3.3.2
 #     mkdir -p /opt/app/lib
 # COPY target/universal/stage/conf /opt/app/conf
 COPY build/dist /opt/app/lib
+COPY docker/logback.xml /opt/app/config/logback.xml
 
 COPY docker/run.sh /opt/app/run.sh
 RUN chmod 755 /opt/app/run.sh

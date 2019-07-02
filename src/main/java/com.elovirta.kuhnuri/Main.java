@@ -34,7 +34,7 @@ public class Main {
             .build();
 
     private void run(final String[] args) throws Exception {
-        System.out.println("Run DITA-OT: " + String.join(" ", args));
+        System.out.println(String.format("Run DITA-OT: %s", String.join(" ", args)));
 
         final URI in = download(new URI(System.getenv("input")));
         final Path out = getTempDir("out");
@@ -79,6 +79,7 @@ public class Main {
     }
 
     private void unzip(final Path jar, final Path tempDir) throws IOException {
+        System.out.println(String.format("Unzip %s to %s", jar, tempDir));
         try (ZipInputStream in = new ZipInputStream(Files.newInputStream(jar, StandardOpenOption.READ))) {
             for (ZipEntry entry = in.getNextEntry(); entry != null; entry = in.getNextEntry()) {
                 Files.copy(in, tempDir.resolve(entry.getName()));
@@ -88,6 +89,7 @@ public class Main {
     }
 
     private void zip(final Path tempDir, final Path jar) throws IOException {
+        System.out.println(String.format("Zip %s to %s", tempDir, jar));
         try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(jar, StandardOpenOption.WRITE))) {
             Files.walk(tempDir)
                     .filter(path -> !Files.isDirectory(path))
@@ -123,7 +125,7 @@ public class Main {
     private Path downloadFromHttp(final URI in, final Path tempDir) throws IOException, InterruptedException {
         final String fileName = getName(in);
         final Path file = tempDir.resolve(fileName);
-        System.out.println("Download " + in + " to " + file);
+        System.out.println(String.format("Download %s to %s", in, file));
         final HttpRequest request = HttpRequest.newBuilder()
                 .uri(in)
                 .build();
@@ -137,7 +139,7 @@ public class Main {
         final Path file = tempDir.resolve(fileName);
         final TransferManager tx = TransferManagerBuilder.standard().withS3Client(s3client).build();
         final Transfer transfer = tx.download(s3Uri.getBucket(), s3Uri.getKey(), file.toFile());
-        System.out.println("Download S3 " + in + " to " + file);
+        System.out.println(String.format("Download %s to %s", in, file));
         transfer.waitForCompletion();
         tx.shutdownNow();
         return file;
@@ -149,7 +151,7 @@ public class Main {
                 : Stream.of(dirOrFile);
         file.parallel().forEach(path -> {
             try {
-                System.out.println("Upload " + output + " to " + output);
+                System.out.println(String.format("Upload %s to %s", path, output));
                 final HttpRequest request = HttpRequest.newBuilder()
                         .uri(output)
                         .POST(BodyPublishers.ofFile(path))
@@ -162,6 +164,7 @@ public class Main {
     }
 
     private void uploadToS3(final Path dirOrFile, final URI output) throws InterruptedException {
+        System.out.println(String.format("Upload %s to %s", dirOrFile, output));
         final AmazonS3URI s3Uri = new AmazonS3URI(output);
         final TransferManager tx = TransferManagerBuilder.standard().withS3Client(s3client).build();
         final Transfer transfer = Files.isDirectory(dirOrFile)

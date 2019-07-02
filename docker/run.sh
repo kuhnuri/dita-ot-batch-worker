@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-CLASSPATH=conf/
+CLASSPATH=config/
 for i in lib/*.jar; do
     CLASSPATH=$CLASSPATH:$i
 done
