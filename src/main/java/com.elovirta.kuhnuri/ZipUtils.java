@@ -14,7 +14,16 @@ public class ZipUtils {
         System.out.println(String.format("Unzip %s to %s", jar, tempDir));
         try (ZipInputStream in = new ZipInputStream(Files.newInputStream(jar, StandardOpenOption.READ))) {
             for (ZipEntry entry = in.getNextEntry(); entry != null; entry = in.getNextEntry()) {
-                Files.copy(in, tempDir.resolve(entry.getName()));
+                if (!entry.isDirectory()) {
+                    final Path file = tempDir.resolve(entry.getName());
+                    final Path parent = file.getParent();
+                    if (!Files.exists(parent)) {
+                        System.out.println(String.format("Create directory %s", parent));
+                        Files.createDirectories(parent);
+                    }
+                    System.out.println(String.format("Copy %s to %s", entry.getName(), file));
+                    Files.copy(in, file);
+                }
                 in.closeEntry();
             }
         }
@@ -30,6 +39,7 @@ public class ZipUtils {
                         final ZipEntry entry = new ZipEntry(name.toString());
                         try {
                             out.putNextEntry(entry);
+                            System.out.println(String.format("Copy %s to %s", tempDir, entry.getName()));
                             Files.copy(path, out);
                             out.closeEntry();
                         } catch (IOException e) {
