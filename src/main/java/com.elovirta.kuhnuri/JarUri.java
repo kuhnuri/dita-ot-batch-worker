@@ -18,7 +18,14 @@ class JarUri {
         }
         final String s = in.toString();
         final int i = s.indexOf("!/");
+        if (i == -1) {
+            throw new IllegalArgumentException(in.toString());
+        }
         final String entry = s.substring(i + 2);
-        return new JarUri(URI.create(s.substring(4, i)), entry.isEmpty() ? null : entry);
+        final URI url = URI.create(s.substring(4, i));
+        if (!url.isAbsolute()) {
+            throw new IllegalArgumentException(url.toString());
+        }
+        return new JarUri(url, entry.isEmpty() ? null : entry);
     }
 }

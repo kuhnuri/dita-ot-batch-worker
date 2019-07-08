@@ -141,8 +141,8 @@ public class Main extends org.apache.tools.ant.Main {
         final AmazonS3URI s3Uri = new AmazonS3URI(in);
         final String fileName = getName(in);
         final Path file = tempDir.resolve(fileName);
-        final Transfer transfer = transferManager.download(s3Uri.getBucket(), s3Uri.getKey(), file.toFile());
         System.out.println(String.format("Download %s to %s", in, file));
+        final Transfer transfer = transferManager.download(s3Uri.getBucket(), s3Uri.getKey(), file.toFile());
         transfer.waitForCompletion();
         return file;
     }
