@@ -121,6 +121,9 @@ public class Main extends org.apache.tools.ant.Main {
                 ZipUtils.unzip(jar, tempDir);
                 Files.delete(jar);
                 return tempDir.resolve(jarUri.entry);
+            case "http":
+            case "https":
+                return downloadFromHttp(input, tempDir);
             default:
                 throw new IllegalArgumentException(input.toString());
         }
@@ -133,7 +136,7 @@ public class Main extends org.apache.tools.ant.Main {
         final HttpRequest request = HttpRequest.newBuilder()
                 .uri(in)
                 .build();
-        HttpResponse<Path> response = client.send(request, BodyHandlers.ofFile(file));
+        final HttpResponse<Path> response = client.send(request, BodyHandlers.ofFile(file));
         return response.body();
     }
 
