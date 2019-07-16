@@ -10,6 +10,7 @@ import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpClient.Redirect;
 import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
@@ -32,11 +33,11 @@ public class Main extends org.apache.tools.ant.Main {
     private TransferManager transferManager;
 
     private void init() {
-        client = HttpClient.newHttpClient();
+        client = HttpClient.newBuilder()
+                .followRedirects(Redirect.NORMAL)
+                .build();
         s3client = AmazonS3ClientBuilder
                 .standard()
-//            .withCredentials(new DefaultAWSCredentialsProviderChain())
-//            .withRegion(Regions.fromName("eu-west-1"))
                 .build();
         transferManager = TransferManagerBuilder
                 .standard()
