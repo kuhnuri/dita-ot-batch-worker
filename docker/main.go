@@ -84,7 +84,6 @@ func getClasspath(base string) string {
 func convert(src string, dstDir string, args []string) error {
 	base := "/opt/app"
 
-	fmt.Printf("Convert %s to %s\n", src, dstDir)
 	cmd := exec.Command("java",
 		"-cp", getClasspath(base),
 		"-Dant.home="+base,
@@ -96,8 +95,7 @@ func convert(src string, dstDir string, args []string) error {
 	cmd.Stderr = os.Stdout
 
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("ERROR: Failed to convert: %v\n", err)
-		return nil
+		return fmt.Errorf("ERROR: Failed to convert: %v", err)
 	}
 
 	return nil
