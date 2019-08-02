@@ -38,7 +38,6 @@ func readArgs() *Args {
 	if err != nil {
 		log.Fatalf("Failed to parse output argument %s: %v", output, err)
 	}
-
 	tmp, err := ioutil.TempDir("", "tmp")
 	if err != nil {
 		log.Fatalf("Failed to create temporary directory: %v", err)
@@ -106,17 +105,14 @@ func main() {
 
 	start, err := kuhnuri.DownloadFile(args.src, args.tmp)
 	if err != nil {
-		log.Fatalf("Failed to download %s: %s", args.src, err.Error())
-		os.Exit(1)
+		log.Fatalf("Failed to download %s: %v", args.src, err)
 	}
 
 	if err := convert(start, args.out, args.args); err != nil {
-		log.Fatalf("Failed to convert %s: %s", args.tmp, err.Error())
-		os.Exit(1)
+		log.Fatalf("Failed to convert %s: %v", args.tmp, err)
 	}
 
 	if err := kuhnuri.UploadFile(args.out, args.dst); err != nil {
-		log.Fatalf("Failed to upload %s: %s", args.dst, err.Error())
-		os.Exit(1)
+		log.Fatalf("Failed to upload %s: %v", args.dst, err)
 	}
 }
