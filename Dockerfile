@@ -1,17 +1,12 @@
+FROM golang:1.12.7 AS builder
+WORKDIR $GOPATH/src/github.com/kuhnuri/batch-fop
+RUN go get -v -u github.com/kuhnuri/go-worker
+COPY docker/main.go .
+#RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app .
+RUN go build -a -o main .
+
 FROM jelovirt/kuhnuri_dita-ot:3.3.2
-
-# RUN mkdir -p /opt/app/conf && \
-#     mkdir -p /opt/app/lib
-# COPY target/universal/stage/conf /opt/app/conf
-COPY build/dist /opt/app/lib
-COPY docker/logback.xml /opt/app/config/logback.xml
-
-COPY docker/run.sh /opt/app/run.sh
-RUN chmod 755 /opt/app/run.sh
-
-# EXPOSE 9000
-# VOLUME ["/var/log/app", "/tmp/app", "/var/lib/app"]
-# HEALTHCHECK CMD curl http://localhost:9000/health || exit 1
-
 WORKDIR /opt/app
-ENTRYPOINT ["./run.sh"]
+COPY docker/logback.xml /opt/app/config/logback.xml
+COPY --from=builder /go/src/github.com/kuhnuri/batch-fop/main .
+ENTRYPOINT ["./main"]
