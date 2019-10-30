@@ -90,6 +90,7 @@ func convert(src string, dstDir string, args []string) error {
 		"-Dargs.input", src,
 		"-Doutput.dir", dstDir)
 	cmd.Args = append(cmd.Args, args...)
+	fmt.Printf("Args: %s", cmd.Args)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
 

@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-set -e
-
-export TAG=3.2
-#bash ./build.sh
+export TAG=3.3.4
 docker-compose build --build-arg TAG=$TAG
 docker-compose push
